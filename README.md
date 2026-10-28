@@ -1,5 +1,5 @@
 Añadida feature: feature/mi-feature
 
-AppVersion-0
+AppVersion-1 (2026-10-28 21:37:47)
 develop
 Añadida feature: feature/mi-feature
