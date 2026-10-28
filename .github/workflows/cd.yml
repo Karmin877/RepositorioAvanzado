@@ -1,0 +1,55 @@
+name: CD Production
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    types: [ opened, synchronize, reopened ]
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  bump-version:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+
+      - name: Incrementar versión en README.md
+        run: |
+          FECHA=$(date '+%Y-%m-%d %H:%M:%S')
+          ACTUAL=$(grep -o -E 'AppVersion-[0-9]+' README.md | head -n1 | cut -d'-' -f2)
+          if [ -z "$ACTUAL" ]; then ACTUAL=0; fi
+          SIGUIENTE=$((ACTUAL + 1))
+          
+          sed -i -E "s/AppVersion-[0-9]+.*/AppVersion-$SIGUIENTE ($FECHA)/" README.md
+          
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          git diff --quiet && git diff --staged --quiet || git commit -m "chore: bump version to AppVersion-$SIGUIENTE [skip ci]"
+          git push
+
+  validate-prod:
+    needs: bump-version
+    runs-on: self-hosted
+    steps:
+      - name: Validar PROD_TOKEN contra variable local
+        shell: powershell
+        env:
+          PROD_TOKEN: ${{ secrets.PROD_TOKEN }}
+        run: |
+          $localProd = [System.Environment]::GetEnvironmentVariable("LOCAL_PROD_TOKEN", "Machine")
+          if (-not $localProd) { $localProd = $env:LOCAL_PROD_TOKEN }
+          if ($env:PROD_TOKEN -eq $localProd) {
+            Write-Output "OK: Validacion PROD_TOKEN correcta."
+            exit 0
+          } else {
+            Write-Error "ERROR: PROD_TOKEN no coincide con LOCAL_PROD_TOKEN."
+            exit 1
+          }
